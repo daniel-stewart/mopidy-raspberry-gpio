@@ -1,6 +1,7 @@
 import logging
 
 import pykka
+import RPi.GPIO as GPIO
 from mopidy import core
 
 logger = logging.getLogger(__name__)
@@ -9,7 +10,6 @@ logger = logging.getLogger(__name__)
 class RaspberryGPIOFrontend(pykka.ThreadingActor, core.CoreListener):
     def __init__(self, config, core):
         super().__init__()
-        import RPi.GPIO as GPIO
 
         self.core = core
         self.config = config["raspberry-gpio"]
@@ -35,6 +35,11 @@ class RaspberryGPIOFrontend(pykka.ThreadingActor, core.CoreListener):
 
                 GPIO.setup(pin, GPIO.IN, pull_up_down=pull)
 
+                if settings.event == "mode":
+                    edge = GPIO.BOTH
+                    self._mode = GPIO.input(pin)
+                    print("Mode of pin ", 4, "is ", self._mode)
+
                 GPIO.add_event_detect(
                     pin,
                     edge,
@@ -58,10 +63,13 @@ class RaspberryGPIOFrontend(pykka.ThreadingActor, core.CoreListener):
             )
 
     def handle_play_pause(self, config):
-        if self.core.playback.get_state().get() == core.PlaybackState.PLAYING:
-            self.core.playback.pause()
+        if self._mode == 1:
+            if self.core.playback.get_state().get() == core.PlaybackState.PLAYING:
+                self.core.playback.pause()
+            else:
+                self.core.playback.play()
         else:
-            self.core.playback.play()
+            print("I'm in the mode for play")
 
     def handle_next(self, config):
         self.core.playback.next()
@@ -82,3 +90,11 @@ class RaspberryGPIOFrontend(pykka.ThreadingActor, core.CoreListener):
         volume -= step
         volume = max(volume, 0)
         self.core.mixer.set_volume(volume)
+
+    def handle_mode(self, config):
+        print("Handling mode switch")
+        for k in config:
+            if k == "pin":
+                pin = int(config[k])
+                self._mode = GPIO.input(pin)
+                print("Mode is currently ", self._mode)
