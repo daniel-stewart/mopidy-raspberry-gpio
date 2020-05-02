@@ -39,6 +39,9 @@ class RaspberryGPIOFrontend(pykka.ThreadingActor, core.CoreListener):
                     edge = GPIO.BOTH
                     self._mode = GPIO.input(pin)
                     print("Mode of pin ", 4, "is ", self._mode)
+                    self.send("custom_command", target='oled', mode=self._mode)
+                    if self._mode == 0:
+                        self.send("custom_command", target='oled', playlist='list')
 
                 GPIO.add_event_detect(
                     pin,
@@ -69,13 +72,19 @@ class RaspberryGPIOFrontend(pykka.ThreadingActor, core.CoreListener):
             else:
                 self.core.playback.play()
         else:
-            print("I'm in the mode for play")
+            self.send("custom_command", target='oled', playlist='select')
 
     def handle_next(self, config):
-        self.core.playback.next()
+        if self._mode == 1:
+            self.core.playback.next()
+        else:
+            self.send("custom_command", target='oled', playlist='next')
 
     def handle_prev(self, config):
-        self.core.playback.previous()
+        if self._mode == 1:
+            self.core.playback.previous()
+        else:
+            self.send("custom_command",target='oled', playlist='prev')
 
     def handle_volume_up(self, config):
         step = int(config.get("step", 5))
@@ -92,9 +101,15 @@ class RaspberryGPIOFrontend(pykka.ThreadingActor, core.CoreListener):
         self.core.mixer.set_volume(volume)
 
     def handle_mode(self, config):
-        print("Handling mode switch")
-        for k in config:
-            if k == "pin":
-                pin = int(config[k])
-                self._mode = GPIO.input(pin)
-                print("Mode is currently ", self._mode)
+        if self._mode == 0:
+            self._mode = 1
+        else:
+            self._mode = 0
+        self.send("custom_command", target='oled', mode=self._mode)
+        if (self._mode == 0):
+            self.send("custom_command", target='oled', playlist='list')
+
+    def custom_command(self, **kwargs):
+        target = kwargs.get("target")
+        if target == 'gpio':
+            print("The custom command was for GPIO")
